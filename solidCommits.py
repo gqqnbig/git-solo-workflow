@@ -109,6 +109,7 @@ except:
 
 commits = list(repo.iter_commits('master..dev'))
 if len(commits) < STABLE_COMMIT_AGE:
+	print('No stable commits. Stable age=' + str(STABLE_COMMIT_AGE))
 	exit(0)
 
 commits.reverse()
@@ -121,6 +122,8 @@ if repo.is_dirty():
 repo.git.checkout('master')
 hasError = False
 stableIssues = {}
+
+successfulCherryPicks = 0
 
 for commit in stableCommits:
 	issueIdMatch = re.search(r'Issue: #(\d+)', commit.message)
@@ -137,9 +140,12 @@ for commit in stableCommits:
 		try:
 			# cherry pick standalone commits.
 			repo.git.cherry_pick(commit.hexsha)
+			successfulCherryPicks += 1
 		except GitCommandError as e:
 			print(f'Commit {commit.hexsha} is stable, but cannot be applied to master.', file=sys.stderr)
 			hasError = True
+
+print(f'master branch has cherry-picked {successfulCherryPicks} commits.')
 
 pushUrl = f"https://{GITHUB_TOKEN}@github.com/{repositoryOwner}/{repositoryName}.git"
 repo.git.push(pushUrl, 'master')
