@@ -33,6 +33,7 @@ def makeIssueBranch(branchName, commits):
 
 def makePullRequest(token, repositoryId, branchName, title):
 	body = '''
+mutation
 {
   createPullRequest(input:{
     	repositoryId:"%s",
@@ -45,7 +46,7 @@ def makePullRequest(token, repositoryId, branchName, title):
     }
   }
 }''' % (repositoryId, branchName, title)
-	response = requests.post('https://api.github.com/graphql', headers={'Authorization': 'bearer ' + token}, data=json.dumps({"mutation": body}))
+	response = requests.post('https://api.github.com/graphql', headers={'Authorization': 'bearer ' + token}, data=json.dumps({"query": body}))
 	data = response.json()
 
 	if 'errors' in data:
