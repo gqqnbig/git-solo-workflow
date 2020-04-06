@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import re
 import sys
 
@@ -46,6 +48,8 @@ def makePullRequest(token, repositoryId, branchName, title):
 	response = requests.post('https://api.github.com/graphql', headers={'Authorization': 'bearer ' + token}, data=json.dumps({"mutation": body}))
 	data = response.json()
 
+	if 'errors' in data:
+		raise Exception(data['errors'])
 	return data['data']['createPullRequest']['pullRequest']
 
 
