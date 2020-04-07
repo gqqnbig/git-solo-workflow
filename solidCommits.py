@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import datetime
+import os
 import re
 import sys
 
@@ -31,7 +33,7 @@ def makeIssueBranch(branchName, commits):
 	repo.git.push(pushUrl, branchName)
 
 
-def makePullRequest(token, repositoryId, branchName, title):
+def makePullRequest(token, repositoryId, branchName, title, body):
 	body = '''
 mutation
 {
@@ -39,13 +41,14 @@ mutation
     	repositoryId:"%s",
     	baseRefName:"master",
     	headRefName:"%s",
-    	title:"%s"}) {
+    	title:"%s",
+    	body:"%s"}) {
     pullRequest {
       createdAt
       id
     }
   }
-}''' % (repositoryId, branchName, title)
+}''' % (repositoryId, branchName, title, body)
 	response = requests.post('https://api.github.com/graphql', headers={'Authorization': 'bearer ' + token}, data=json.dumps({"query": body}))
 	data = response.json()
 
@@ -66,112 +69,134 @@ def getRepositoryId(token, repositoryOwner, repositoryName):
 	return data['data']['repository']['id']
 
 
-repo = None
-try:
-	repo = Repo(sys.argv[-1])
-except Exception as e:
-	print(sys.argv[-1] + " is not a valid Git repo. Append the proper path as the last parameter:\n" + str(e))
-	exit(1)
+def getCommits(repo):
+	# A commit is considered as stable if there are this number of commits after it.
+	try:
+		index = sys.argv.index("--mature-count")
+		STABLE_COMMIT_COUNT = int(sys.argv[index + 1])
+	except:
+		STABLE_COMMIT_COUNT = 20
+	try:
+		index = sys.argv.index("--mature-age")
+		STABLE_COMMIT_AGE = int(sys.argv[index + 1])
+	except:
+		STABLE_COMMIT_AGE = 1
+	commits = list(repo.iter_commits('master..dev'))
+	if len(commits) < STABLE_COMMIT_COUNT:
+		print('No stable commits. mature count=' + str(STABLE_COMMIT_COUNT))
+		exit(0)
+	commits.reverse()
+	stableCommits = [c for c in commits[:-STABLE_COMMIT_AGE] if (datetime.datetime.now(c.committed_datetime.tzinfo) - c.committed_datetime).days >= STABLE_COMMIT_AGE]
+	unstableCommits = [c for c in commits if c not in stableCommits]
+	return stableCommits, unstableCommits
 
-try:
-	index = sys.argv.index("--token")
-	GITHUB_TOKEN = sys.argv[index + 1]
-except:
-	raise AssertionError('GitHub token is not found. Use --token option to provide it.')
 
-try:
-	index = sys.argv.index('--repositoryName')
-	repositoryName = sys.argv[index + 1]
+if __name__ == "__main__":
+	if '--help' in sys.argv or len(sys.argv) == 0:
+		print(f'''
+	{"python " if sys.platform == 'win32' else "./" + os.path.basename(__file__)} 
+	--help\tShow this help.
+	--token str\tGitHub token.
+	--repositoryName str
+	--repositoryOwner str
+	--mature-count int\tA commit matures if there are int commits after it. Default value is 20.
+	--mature-age int\tA commit matures if its commit date is int days ago. Default value is 1.''')
 
-	index = sys.argv.index('--repositoryOwner')
-	repositoryOwner = sys.argv[index + 1]
-except:
-	origin = repo.remote('origin')
-	urls = list(origin.urls)
-	if len(urls) != 1:
-		raise AssertionError(f'Expect 1 url for remote origin, but there are {len(urls)}.')
-	originUrl = urls[0]
+	repo = None
+	try:
+		repo = Repo(sys.argv[-1])
+	except Exception as e:
+		print(sys.argv[-1] + " is not a valid Git repo. Append the proper path as the last parameter:\n" + str(e))
+		exit(1)
 
-	m = re.search(r'github\.com/([^/]+)/(.+?)\.git', originUrl)
-	if m is None:
-		raise AssertionError('Unable to find repository name and repository owner from git remote origin. You may want to provide it through command line options --repositoryName, --repositoryOwner.')
+	try:
+		index = sys.argv.index("--token")
+		GITHUB_TOKEN = sys.argv[index + 1]
+	except:
+		raise AssertionError('GitHub token is not found. Use --token option to provide it.')
 
-	repositoryOwner = m.group(1)
-	repositoryName = m.group(2)
+	try:
+		index = sys.argv.index('--repositoryName')
+		repositoryName = sys.argv[index + 1]
 
-repositoryId = getRepositoryId(GITHUB_TOKEN, repositoryOwner, repositoryName)
+		index = sys.argv.index('--repositoryOwner')
+		repositoryOwner = sys.argv[index + 1]
+	except:
+		origin = repo.remote('origin')
+		urls = list(origin.urls)
+		if len(urls) != 1:
+			raise AssertionError(f'Expect 1 url for remote origin, but there are {len(urls)}.')
+		originUrl = urls[0]
 
-# A commit is considered as stable if there are this number of commits after it.
-try:
-	index = sys.argv.index("--stable-age")
-	STABLE_COMMIT_AGE = int(sys.argv[index + 1])
-except:
-	STABLE_COMMIT_AGE = 20
+		m = re.search(r'github\.com/([^/]+)/(.+?)\.git', originUrl)
+		if m is None:
+			raise AssertionError('Unable to find repository name and repository owner from git remote origin. You may want to provide it through command line options --repositoryName, --repositoryOwner.')
 
-commits = list(repo.iter_commits('master..dev'))
-if len(commits) < STABLE_COMMIT_AGE:
-	print('No stable commits. Stable age=' + str(STABLE_COMMIT_AGE))
-	exit(0)
+		repositoryOwner = m.group(1)
+		repositoryName = m.group(2)
 
-commits.reverse()
-stableCommits = commits[:-STABLE_COMMIT_AGE]
-unstableCommits = commits[-STABLE_COMMIT_AGE:]
+	repositoryId = getRepositoryId(GITHUB_TOKEN, repositoryOwner, repositoryName)
 
-if repo.is_dirty():
-	raise AssertionError('Unable to work on a dirty repository.')
+	stableCommits, unstableCommits = getCommits(repo)
+	if len(stableCommits):
+		print('No stable commits. Adjust --mature-count, --mature-age if you want.')
+		exit()
 
-repo.git.checkout('master')
-hasError = False
-stableIssues = {}
+	if repo.is_dirty():
+		raise AssertionError('Unable to work on a dirty repository.')
 
-successfulCherryPicks = 0
+	repo.git.checkout('master')
+	hasError = False
+	stableIssues = {}
 
-for commit in stableCommits:
-	issueIdMatch = re.search(r'Issue: #(\d+)', commit.message)
-	if issueIdMatch is not None:
-		issueId = int(issueIdMatch.group(1))
-		print(commit.hexsha + ' is part of Issue ' + str(issueId))
-		if issueId in stableIssues:
-			stableIssues[issueId].append(commit.hexsha)
+	successfulCherryPicks = 0
+
+	for commit in stableCommits:
+		issueIdMatch = re.search(r'Issue: #(\d+)', commit.message)
+		if issueIdMatch is not None:
+			issueId = int(issueIdMatch.group(1))
+			print(commit.hexsha + ' is part of Issue ' + str(issueId))
+			if issueId in stableIssues:
+				stableIssues[issueId].append(commit.hexsha)
+			else:
+				stableIssues[issueId] = [commit.hexsha]
 		else:
-			stableIssues[issueId] = [commit.hexsha]
-	else:
-		print(commit.hexsha + ' is standalone commit.')
+			print(commit.hexsha + ' is standalone commit.')
 
+			try:
+				# cherry pick standalone commits.
+				repo.git.cherry_pick(commit.hexsha)
+				successfulCherryPicks += 1
+			except GitCommandError as e:
+				print(f'Commit {commit.hexsha} is stable, but cannot be applied to master.', file=sys.stderr)
+				hasError = True
+
+	print(f'master branch has cherry-picked {successfulCherryPicks} commits.')
+
+	pushUrl = f"https://{GITHUB_TOKEN}@github.com/{repositoryOwner}/{repositoryName}.git"
+	repo.git.push(pushUrl, 'master')
+
+	for commit in unstableCommits:
+		issueIdMatch = re.search(r'Issue: #(\d+)', commit.message)
+		if issueIdMatch is not None:
+			issueId = int(issueIdMatch.group(1))
+			stableIssues.pop(issueId, None)
+
+	for id, commits in stableIssues.items():
+		print(f'Issue {id} (commits {commits}) is stable.')
+
+		branchName = 'Issue' + str(id)
 		try:
-			# cherry pick standalone commits.
-			repo.git.cherry_pick(commit.hexsha)
-			successfulCherryPicks += 1
-		except GitCommandError as e:
-			print(f'Commit {commit.hexsha} is stable, but cannot be applied to master.', file=sys.stderr)
+			makeIssueBranch(branchName, commits)
+		except Exception as e:
+			print(str(e), file=sys.stderr)
 			hasError = True
 
-print(f'master branch has cherry-picked {successfulCherryPicks} commits.')
+		try:
+			print(makePullRequest(GITHUB_TOKEN, repositoryId, branchName, 'Implement issue ' + str(id), "Issue #" + str(id)))
+		except Exception as e:
+			print(str(e), file=sys.stderr)
+			hasError = True
 
-pushUrl = f"https://{GITHUB_TOKEN}@github.com/{repositoryOwner}/{repositoryName}.git"
-repo.git.push(pushUrl, 'master')
-
-for commit in unstableCommits:
-	issueIdMatch = re.search(r'Issue: #(\d+)', commit.message)
-	if issueIdMatch is not None:
-		issueId = int(issueIdMatch.group(1))
-		stableIssues.pop(issueId, None)
-
-for id, commits in stableIssues.items():
-	print(f'Issue {id} (commits {commits}) is stable.')
-
-	branchName = 'Issue' + str(id)
-	try:
-		makeIssueBranch(branchName, commits)
-	except Exception as e:
-		print(str(e), file=sys.stderr)
-		hasError = True
-
-	try:
-		print(makePullRequest(GITHUB_TOKEN, repositoryId, branchName, 'Implement issue ' + str(id)))
-	except Exception as e:
-		print(str(e), file=sys.stderr)
-		hasError = True
-
-if hasError:
-	exit(1)
+	if hasError:
+		exit(1)
