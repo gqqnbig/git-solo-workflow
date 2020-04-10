@@ -177,10 +177,10 @@ The default value of repo-path is the current directory.
 				print(f'Commit {commit.hexsha} is stable, but cannot be applied to master.', file=sys.stderr)
 				hasError = True
 
-	print(f'master branch has cherry-picked {successfulCherryPicks} commits.')
-
 	pushUrl = f"https://{GITHUB_TOKEN}@github.com/{repositoryOwner}/{repositoryName}.git"
-	repo.git.push(pushUrl, 'master')
+	print(f'master branch has cherry-picked {successfulCherryPicks} commits.')
+	if successfulCherryPicks > 0:
+		repo.git.push(pushUrl, 'master')
 
 	for commit in unstableCommits:
 		issueIdMatch = re.search(r'Issue: #(\d+)', commit.message)
