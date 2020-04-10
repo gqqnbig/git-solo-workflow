@@ -94,19 +94,25 @@ def getCommits(repo):
 if __name__ == "__main__":
 	if '--help' in sys.argv or len(sys.argv) == 0:
 		print(f'''
-	{"python " if sys.platform == 'win32' else "./" + os.path.basename(__file__)} 
-	--help\tShow this help.
-	--token str\tGitHub token.
-	--repositoryName str
-	--repositoryOwner str
-	--mature-count int\tA commit matures if there are int commits after it. Default value is 20.
-	--mature-age int\tA commit matures if its commit date is int days ago. Default value is 1.''')
+	{"python " if sys.platform == 'win32' else "./" + os.path.basename(__file__)} [repo-path] 
+--help\tShow this help.
+--token str\tGitHub token.
+--repositoryName str
+--repositoryOwner str
+--mature-count int\tA commit matures if there are int commits after it. Default value is 20.
+--mature-age int\tA commit matures if its commit date is int days ago. Default value is 1.
+
+The default value of repo-path is the current directory. 
+''')
 
 	repo = None
 	try:
-		repo = Repo(sys.argv[-1])
+		if os.path.exists(sys.argv[-1]):
+			repo = Repo(sys.argv[-1])
+		else:
+			repo = Repo(os.curdir)
 	except Exception as e:
-		print(sys.argv[-1] + " is not a valid Git repo. Append the proper path as the last parameter:\n" + str(e))
+		print(sys.argv[-1] + " is not a valid Git repo. Append the proper path as the last parameter or `cd` to the target directory:\n" + str(e))
 		exit(1)
 
 	try:
