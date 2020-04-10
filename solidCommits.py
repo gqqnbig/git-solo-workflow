@@ -91,6 +91,14 @@ def getCommits(repo):
 	return stableCommits, unstableCommits
 
 
+def getIssueId(commit):
+	issueIdMatch = re.search(r'Issue: #(\d+)', commit.message)
+	if issueIdMatch is not None:
+		return int(issueIdMatch.group(1))
+	else:
+		return None
+
+
 if __name__ == "__main__":
 	if '--help' in sys.argv or len(sys.argv) == 0:
 		print(f'''
@@ -158,9 +166,8 @@ The default value of repo-path is the current directory.
 	successfulCherryPicks = 0
 
 	for commit in stableCommits:
-		issueIdMatch = re.search(r'Issue: #(\d+)', commit.message)
-		if issueIdMatch is not None:
-			issueId = int(issueIdMatch.group(1))
+		issueId = getIssueId(commit)
+		if issueId is not None:
 			print(commit.hexsha + ' is part of Issue ' + str(issueId))
 			if issueId in stableIssues:
 				stableIssues[issueId].append(commit.hexsha)
