@@ -86,7 +86,7 @@ def getCommits(repo):
 		print('No stable commits. mature count=' + str(STABLE_COMMIT_COUNT))
 		exit(0)
 	commits.reverse()
-	stableCommits = [c for c in commits[:-STABLE_COMMIT_AGE] if (datetime.datetime.now(c.committed_datetime.tzinfo) - c.committed_datetime).days >= STABLE_COMMIT_AGE]
+	stableCommits = [c for c in commits[:-STABLE_COMMIT_COUNT] if (datetime.datetime.now(c.committed_datetime.tzinfo) - c.committed_datetime).days >= STABLE_COMMIT_AGE]
 	unstableCommits = [c for c in commits if c not in stableCommits]
 	return stableCommits, unstableCommits
 
