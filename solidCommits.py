@@ -144,7 +144,7 @@ The default value of repo-path is the current directory.
 	repositoryId = getRepositoryId(GITHUB_TOKEN, repositoryOwner, repositoryName)
 
 	stableCommits, unstableCommits = getCommits(repo)
-	if len(stableCommits):
+	if len(stableCommits) == 0:
 		print('No stable commits. Adjust --mature-count, --mature-age if you want.')
 		exit()
 
