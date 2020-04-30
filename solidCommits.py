@@ -73,20 +73,20 @@ def getCommits(repo):
 	# A commit is considered as stable if there are this number of commits after it.
 	try:
 		index = sys.argv.index("--mature-count")
-		STABLE_COMMIT_COUNT = int(sys.argv[index + 1])
+		MATURE_COUNT = int(sys.argv[index + 1])
 	except:
-		STABLE_COMMIT_COUNT = 20
+		MATURE_COUNT = 20
 	try:
 		index = sys.argv.index("--mature-age")
-		STABLE_COMMIT_AGE = int(sys.argv[index + 1])
+		MATURE_AGE = int(sys.argv[index + 1])
 	except:
-		STABLE_COMMIT_AGE = 1
+		MATURE_AGE = 1
 	commits = list(repo.iter_commits('master..dev'))
-	if len(commits) < STABLE_COMMIT_COUNT:
-		print('No stable commits. mature count=' + str(STABLE_COMMIT_COUNT))
+	if len(commits) < MATURE_COUNT:
+		print('No stable commits. mature count=' + str(MATURE_COUNT))
 		exit(0)
 	commits.reverse()
-	stableCommits = [c for c in commits[:-STABLE_COMMIT_COUNT] if (datetime.datetime.now(c.committed_datetime.tzinfo) - c.committed_datetime).days >= STABLE_COMMIT_AGE]
+	stableCommits = [c for c in commits[:-MATURE_COUNT] if (datetime.datetime.now(c.committed_datetime.tzinfo) - c.committed_datetime).days >= MATURE_AGE]
 
 	try:
 		index = sys.argv.index('--ignore')
@@ -138,12 +138,35 @@ The default value of repo-path is the current directory.
 	except:
 		raise AssertionError('GitHub token is not found. Use --token option to provide it.')
 
+	# A commit is considered as stable if there are this number of commits after it.
+	try:
+		index = sys.argv.index("--mature-count")
+		MATURE_COUNT = int(sys.argv[index + 1])
+	except:
+		MATURE_COUNT = 20
+
+	try:
+		index = sys.argv.index("--mature-age")
+		MATURE_AGE = int(sys.argv[index + 1])
+	except:
+		MATURE_AGE = 1
+
+	commits = list(repo.iter_commits('master..dev'))
+	if len(commits) < MATURE_COUNT:
+		print('No stable commits. mature count=' + str(MATURE_COUNT))
+		exit(0)
+	commits.reverse()
+	stableCommits = [c for c in commits[:-MATURE_COUNT] if (datetime.datetime.now(c.committed_datetime.tzinfo) - c.committed_datetime).days >= MATURE_AGE]
+
+	try:
+		index = sys.argv.index('--repositoryOwner')
+		REPOSITORY_OWNER = sys.argv[index + 1]
+	except:
+		REPOSITORY_OWNER = None
+
 	try:
 		index = sys.argv.index('--repositoryName')
-		repositoryName = sys.argv[index + 1]
-
-		index = sys.argv.index('--repositoryOwner')
-		repositoryOwner = sys.argv[index + 1]
+		REPOSITORY_NAME = sys.argv[index + 1]
 	except:
 		origin = repo.remote('origin')
 		urls = list(origin.urls)
@@ -155,14 +178,14 @@ The default value of repo-path is the current directory.
 		if m is None:
 			raise AssertionError('Unable to find repository name and repository owner from git remote origin. You may want to provide it through command line options --repositoryName, --repositoryOwner.')
 
-		repositoryOwner = m.group(1)
-		repositoryName = m.group(2)
+		REPOSITORY_OWNER = m.group(1)
+		REPOSITORY_NAME = m.group(2)
 
-	repositoryId = getRepositoryId(GITHUB_TOKEN, repositoryOwner, repositoryName)
+	repositoryId = getRepositoryId(GITHUB_TOKEN, REPOSITORY_OWNER, REPOSITORY_NAME)
 
 	stableCommits, unstableCommits = getCommits(repo)
 	if len(stableCommits) == 0:
-		print('No stable commits. Adjust --mature-count, --mature-age if you want.')
+		print(f'No stable commits. mature-count={MATURE_COUNT}, mature-age={MATURE_AGE}.')
 		exit()
 
 	if repo.is_dirty():
@@ -193,7 +216,7 @@ The default value of repo-path is the current directory.
 				print(f'Commit {commit.hexsha} is stable, but cannot be applied to master.', file=sys.stderr)
 				hasError = True
 
-	pushUrl = f"https://{GITHUB_TOKEN}@github.com/{repositoryOwner}/{repositoryName}.git"
+	pushUrl = f"https://{GITHUB_TOKEN}@github.com/{REPOSITORY_OWNER}/{REPOSITORY_NAME}.git"
 	print(f'master branch has cherry-picked {successfulCherryPicks} commits.')
 	if successfulCherryPicks > 0:
 		repo.git.push(pushUrl, 'master')
